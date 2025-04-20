@@ -1,58 +1,73 @@
-# Importing necessary libraries
 import hashlib
 import base64
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 import streamlit as st
 
-# 🔐 Step 1: Password se encryption key banana
+# 🔐 Password to encryption key
 def generate_key(password):
-    # Password ko sha256 hash mein convert karte hain (256-bit)
+    """Generate Fernet-compatible key from password"""
+    if not password:
+        raise ValueError("Password cannot be empty")
     hashed = hashlib.sha256(password.encode()).digest()
-    # Base64 encode karte hain taake Fernet-compatible key ban jaye
     return base64.urlsafe_b64encode(hashed)
 
-# 🔒 Step 2: Encrypt karna (message ko password se encrypt karna)
+# 🔒 Encryption function
 def encrypt_text(text, password):
-    key = generate_key(password)  # Password se key generate karna
-    fernet = Fernet(key)          # Fernet object create karna
-    encrypted = fernet.encrypt(text.encode())  # Encrypt karna
-    return encrypted.decode()  # Encrypted text ko string ke form mein return karna
+    """Encrypt text using password-derived key"""
+    if not text:
+        raise ValueError("Text cannot be empty")
+    key = generate_key(password)
+    fernet = Fernet(key)
+    encrypted = fernet.encrypt(text.encode())
+    return encrypted.decode()
 
-# 🔓 Step 3: Decrypt karna (encrypted text ko password se decrypt karna)
+# 🔓 Decryption function
 def decrypt_text(encrypted_text, password):
-    key = generate_key(password)  # Same key generate karna
-    fernet = Fernet(key)          # Fernet object create karna
+    """Decrypt text using password-derived key"""
+    if not encrypted_text:
+        raise ValueError("Encrypted text cannot be empty")
+    key = generate_key(password)
+    fernet = Fernet(key)
     try:
-        decrypted = fernet.decrypt(encrypted_text.encode())  # Decrypt karna
-        return decrypted.decode()  # Decrypted text ko string mein return karna
-    except:
-        return "❌ Decryption failed. Wrong password or data."
+        decrypted = fernet.decrypt(encrypted_text.encode())
+        return decrypted.decode()
+    except InvalidToken:
+        return "❌ Decryption failed - wrong password or corrupted data"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
 
-# 🔧 Step 4: Streamlit interface setup
+# 🎛️ Streamlit UI
 st.title("🔐 Secure Data Encryption App")
+st.warning("Important: Remember your password! Without it, data cannot be recovered.")
 
-# User se message input lene ke liye
-text = st.text_area("Enter your message:")
+# Input sections
+col1, col2 = st.columns(2)
+with col1:
+    text = st.text_area("Message:", height=150)
+with col2:
+    password = st.text_input("Password:", type="password")
+    confirm_pass = st.text_input("Confirm Password:", type="password") if st.toggle("Show confirm field") else None
 
-# User se password input lene ke liye (password field ke liye)
-password = st.text_input("Enter a password:", type="password")
+mode = st.radio("Action:", ["Encrypt", "Decrypt"], horizontal=True)
 
-# User ko action choose karne ke liye (Encrypt ya Decrypt)
-mode = st.radio("Select action:", ["Encrypt", "Decrypt"])
-
-# Action perform karna jab button press ho
-if st.button("Run"):
+if st.button("Process"):
     if not text or not password:
-        st.warning("Please enter both text and password.")
+        st.error("Please enter both message and password")
+    elif confirm_pass and (password != confirm_pass):
+        st.error("Passwords don't match!")
     else:
-        if mode == "Encrypt":
-            encrypted = encrypt_text(text, password)  # Encrypt karna
-            st.success("✅ Encrypted Message:")
-            st.code(encrypted)  # Encrypted message show karna
-        else:
-            decrypted = decrypt_text(text, password)  # Decrypt karna
-            if decrypted.startswith("❌"):
-                st.error(decrypted)  # Agar decryption fail ho toh error dikhana
+        try:
+            if mode == "Encrypt":
+                result = encrypt_text(text, password)
+                st.success("✅ Encrypted Message:")
+                st.code(result)
+                st.download_button("Download Encrypted Message", result, "encrypted.txt")
             else:
-                st.success("🔓 Decrypted Message:")
-                st.code(decrypted)  # Decrypted message show karna
+                result = decrypt_text(text, password)
+                if result.startswith("❌"):
+                    st.error(result)
+                else:
+                    st.success("🔓 Decrypted Message:")
+                    st.code(result)
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
